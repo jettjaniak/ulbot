@@ -7,7 +7,7 @@ import time
 import argparse
 from datetime import datetime, timedelta
 
-# TODO: requests.exceptions.ConnectionError, async (grequests)
+# TODO: requests.exceptions.ConnectionError, async (grequests), don't login again if not required
 
 CAS_LOGIN_URL = 'https://logowanie.uw.edu.pl/cas/login'
 CAS_LOGIN_POST_DATA_BASE = dict(
@@ -68,7 +68,11 @@ def main():
         try:
             # req_list = [grequests.post(REGISTER_URL, data=dict(**REGISTER_POST_DATA, csrftoken=csrf, prgos_id=prgos), session=s)]
             # response = grequests.map(req_list)[0]
-            response = session.post(REGISTER_URL, data=dict(course_id=course_id, gr_no=group_nr, csrftoken=csrf, prgos_id=prgos))
+            register_post_data = dict(course_id=course_id, gr_no=group_nr, csrftoken=csrf, prgos_id=prgos)
+            register_request = requests.Request('POST',  REGISTER_URL, data=register_post_data)
+            prepped_register_request = session.prepare_request(register_request)
+            response = session.send(prepped_register_request)
+
             logging.debug(response.text)
             if response.json()['komunikat'] == 'ERR_REG_NOT_ACTIVE_YET':
                 open_date = datetime.strptime(response.json()['params']['openDate'], '%Y-%m-%d %H:%M:%S')
@@ -79,9 +83,9 @@ def main():
                     print(' ', time_left, 'left, waiting to send register request...')
                     time.sleep(time_left.total_seconds())
                     # time.sleep(3)
-                    new_response = session.send(response.request)
-                    print('  %s' % new_response.text)
-                    return new_response.json()['komunikat'] in {'CONF_REG_SUCCESS', 'CONF_REG_SUCCESS_WITH_LINK'}
+                    response = session.send(prepped_register_request)
+                    print('  %s' % response.text)
+                    return response.json()['komunikat'] in {'CONF_REG_SUCCESS', 'CONF_REG_SUCCESS_WITH_LINK'}
                 else:
                     print('  More than 4 minutes left, waiting ', time_left-timedelta(minutes=2), ' to login again...')
                     time.sleep((time_left-timedelta(minutes=2)).total_seconds())
@@ -94,6 +98,7 @@ def main():
                 print("  Status: %s" % response.json()['komunikat'])
                 return False
         except json.JSONDecodeError:
+            # probably authentication error
             print("JSONDecode error.")
             return False
 
