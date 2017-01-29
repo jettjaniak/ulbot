@@ -17,7 +17,7 @@ CAS_LOGIN_POST_DATA_BASE = dict(
 UL_COOKIE_NAME = 'BIGipServerrejestracja.usos.uw.app~rejestracja.usos.uw_pool'
 COURSE_URL_BASE = 'http://rejestracja.usos.uw.edu.pl/course.php?course_id=%d&gr_no=%d'
 REGISTER_URL = 'http://rejestracja.usos.uw.edu.pl/cart.php?op=reg'
-
+APISRV_NOW_URL = 'http://usosapps.uw.edu.pl/services/apisrv/now'
 
 def soup(response):
     return bs4.BeautifulSoup(response.text, 'html.parser')
@@ -84,7 +84,7 @@ def register(session, course_id, group_nr, csrf, prgos):
         logging.debug(response.text)
         if response.json()['komunikat'] == 'ERR_REG_NOT_ACTIVE_YET':
             open_date = datetime.strptime(response.json()['params']['openDate'], '%Y-%m-%d %H:%M:%S')
-            now = datetime.strptime(response.json()['params']['now'], '%Y-%m-%d %H:%M:%S')
+            now = datetime.strptime(requests.get(APISRV_NOW_URL).text, '"%Y-%m-%d %H:%M:%S.%f"')
             time_left = open_date - now
             print("  Registration not active yet.")
             if time_left < timedelta(minutes=4):
