@@ -24,8 +24,10 @@ def soup(response):
 
 
 def select_one(response, selector):
-    return soup(response).select_one(selector)
-
+    try:
+        return soup(response).select_one(selector)
+    except TypeError:
+        pass
 
 def send_prepped(session, prepped):
     while True:
@@ -39,10 +41,13 @@ def send_prepped(session, prepped):
 def cas_login(session, username, password):
     get_response = session.get(CAS_LOGIN_URL)
     token = select_one(get_response, 'input[name=lt]')['value']
-    post_data = dict(**CAS_LOGIN_POST_DATA_BASE, username=username, password=password, lt=token)
-    post_response = session.post(CAS_LOGIN_URL, data=post_data)
-    message = select_one(post_response, '#msg')
-    return 'success' in message['class']
+    if token:
+        post_data = dict(**CAS_LOGIN_POST_DATA_BASE, username=username, password=password, lt=token)
+        post_response = session.post(CAS_LOGIN_URL, data=post_data)
+        message = select_one(post_response, '#msg')
+        return 'success' in message['class']
+    else:
+        return False
 
 
 def ul_auth(session):
