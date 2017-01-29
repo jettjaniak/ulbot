@@ -7,17 +7,19 @@ import time
 import argparse
 from datetime import datetime, timedelta
 
-# TODO: async (grequests), don't login again if not required
+# TODO: async (grequests), credentials or PHPSESSID
 
 CAS_LOGIN_URL = 'https://logowanie.uw.edu.pl/cas/login'
 CAS_LOGIN_POST_DATA_BASE = dict(
     execution='e1s1',
     _eventId='submit'
 )
+CAS_COOKIE_NAME = 'BIGipServerlogowanie.uw.edu.pl.app~logowanie.uw.edu.pl_pool'
 UL_COOKIE_NAME = 'BIGipServerrejestracja.usos.uw.app~rejestracja.usos.uw_pool'
 COURSE_URL_BASE = 'http://rejestracja.usos.uw.edu.pl/course.php?course_id=%d&gr_no=%d'
 REGISTER_URL = 'http://rejestracja.usos.uw.edu.pl/cart.php?op=reg'
 APISRV_NOW_URL = 'http://usosapps.uw.edu.pl/services/apisrv/now'
+
 
 def soup(response):
     return bs4.BeautifulSoup(response.text, 'html.parser')
@@ -28,6 +30,7 @@ def select_one(response, selector):
         return soup(response).select_one(selector)
     except TypeError:
         pass
+
 
 def send_prepped(session, prepped):
     while True:
@@ -128,6 +131,7 @@ def main():
                 print("Logging in to CAS... ", end='')
                 if cas_login(s, args.username, args.password):
                     print("success.")
+                    print(" * BIGipSer...:  %s" % s.cookies[CAS_COOKIE_NAME])
                     print(" * CASTGCNG:     %s" % s.cookies['CASTGCNG'])
                     print(" * JSESSIONID:   %s" % s.cookies['JSESSIONID'])
                     print("Authorizing to UL... ", end='')
