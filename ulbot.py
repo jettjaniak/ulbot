@@ -1,160 +1,100 @@
 import json
-import re
 import logging
 import requests
-import bs4
 import time
 import argparse
 from datetime import datetime, timedelta
 
-# TODO: async (grequests), credentials or PHPSESSID
+import settings
+from helpers import send_prepped, provide_secrets
 
-CAS_LOGIN_URL = 'https://logowanie.uw.edu.pl/cas/login'
-CAS_LOGIN_POST_DATA_BASE = dict(
-    execution='e1s1',
-    _eventId='submit'
-)
-CAS_COOKIE_NAME = 'BIGipServerlogowanie.uw.edu.pl.app~logowanie.uw.edu.pl_pool'
-UL_COOKIE_NAME = 'BIGipServerrejestracja.usos.uw.app~rejestracja.usos.uw_pool'
-COURSE_URL_BASE = 'http://rejestracja.usos.uw.edu.pl/course.php?course_id=%d&gr_no=%d'
-REGISTER_URL = 'http://rejestracja.usos.uw.edu.pl/cart.php?op=reg'
-APISRV_NOW_URL = 'http://usosapps.uw.edu.pl/services/apisrv/now'
+# TODO: async (grequests)
 
 
-def soup(response):
-    return bs4.BeautifulSoup(response.text, 'html.parser')
+def register(course_id, group_nr, cookie, username, password):
+    secrets = provide_secrets(cookie, username, password, course_id, group_nr)
+    post_data = dict(course_id=course_id, gr_no=group_nr, csrftoken=secrets['csrf'], prgos_id=secrets['prgos'])
+    request = requests.Request('POST', settings.REGISTER_URL, data=post_data, cookies={'PHPSESSID': secrets['cookie']})
+    prepped = request.prepare()
+    limit = 0
 
-
-def select_one(response, selector):
-    try:
-        return soup(response).select_one(selector)
-    except TypeError:
-        pass
-
-
-def send_prepped(session, prepped):
-    while True:
-        try:
-            response = session.send(prepped)
-            return response
-        except requests.exceptions.ConnectionError:
-            continue
-
-
-def cas_login(session, username, password):
-    get_response = session.get(CAS_LOGIN_URL)
-    token = select_one(get_response, 'input[name=lt]')['value']
-    if token:
-        post_data = dict(**CAS_LOGIN_POST_DATA_BASE, username=username, password=password, lt=token)
-        post_response = session.post(CAS_LOGIN_URL, data=post_data)
-        message = select_one(post_response, '#msg')
-        return 'success' in message['class']
-    else:
-        return False
-
-
-def ul_auth(session):
-    url = 'https://logowanie.uw.edu.pl/cas/login;jsessionid=%s' % session.cookies['JSESSIONID']
-    params = dict(service='http://rejestracja.usos.uw.edu.pl/caslogin.php')
-    response = session.get(url, params=params)
-    return UL_COOKIE_NAME in session.cookies
-
-
-def fetch_group(session, course_id, group_nr):
-    response = session.get(COURSE_URL_BASE % (course_id, group_nr))
-    logging.debug(response.history)
-    group_soup = soup(response)
-    prgos_div = group_soup.select_one('.groupCart div')
-    if prgos_div:
-        prgos = prgos_div['data-prgos-id']
-        if prgos != 'null':
-            return dict(
-                prgos=prgos,
-                csrf=re.search('csrfToken: \'([0-9]{4}-[0-9]{2}-[0-9]{2}-[a-f0-9]{16})\'',
-                               response.text).group(1)
-            )
-
-
-def register(session, course_id, group_nr, csrf, prgos):
-    try:
-        # req_list = [grequests.post(REGISTER_URL, data=dict(**REGISTER_POST_DATA, csrftoken=csrf, prgos_id=prgos), session=s)]
-        # response = grequests.map(req_list)[0]
-        register_post_data = dict(course_id=course_id, gr_no=group_nr, csrftoken=csrf, prgos_id=prgos)
-        register_request = requests.Request('POST',  REGISTER_URL, data=register_post_data)
-        prepped_register_request = session.prepare_request(register_request)
-        response = send_prepped(session, prepped_register_request)
-
+    print("Registering:")
+    success = False
+    while not success:
+        response = send_prepped(prepped)
         logging.debug(response.text)
-        if response.json()['komunikat'] == 'ERR_REG_NOT_ACTIVE_YET':
-            open_date = datetime.strptime(response.json()['params']['openDate'], '%Y-%m-%d %H:%M:%S')
-            now = datetime.strptime(requests.get(APISRV_NOW_URL).text, '"%Y-%m-%d %H:%M:%S.%f"')
+
+        try:
+            response_json = response.json()
+        except json.JSONDecodeError:
+            print("Authentication error.")
+            register(course_id, group_nr, secrets['cookie'], username, password)
+
+        komunikat = response_json['komunikat']
+        if komunikat == 'ERR_REG_NOT_ACTIVE_YET':
+            open_date = datetime.strptime(response_json['params']['openDate'], '%Y-%m-%d %H:%M:%S')
+            now = datetime.strptime(requests.get(settings.APISRV_NOW_URL).text, '"%Y-%m-%d %H:%M:%S.%f"')
             time_left = open_date - now
-            print("  Registration not active yet.")
-            if time_left < timedelta(minutes=4):
-                print(' ', time_left, 'left, waiting to send register request...')
+            print("  * Registration not active yet.")
+            if time_left < timedelta(minutes=1):
+                print('    Waiting', time_left, 'to send register request...')
                 time.sleep(time_left.total_seconds())
                 # time.sleep(3)
-                response = send_prepped(session, prepped_register_request)
-                print('  %s' % response.text)
-                return response.json()['komunikat'] in {'CONF_REG_SUCCESS', 'CONF_REG_SUCCESS_WITH_LINK'}
+                continue
             else:
-                print('  More than 4 minutes left, waiting ', time_left-timedelta(minutes=2), ' to login again...')
-                time.sleep((time_left-timedelta(minutes=2)).total_seconds())
+                print('    More than one minute left, waiting ', time_left-timedelta(minutes=1), ' to try again...')
+                time.sleep((time_left-timedelta(minutes=1)).total_seconds())
                 # time.sleep(3)
-                return False
-        elif response.json()['komunikat'] in {'CONF_REG_SUCCESS', 'CONF_REG_SUCCESS_WITH_LINK'}:
-            print("  Registered!")
-            return True
+                register(course_id, group_nr, secrets['cookie'], username, password)
+        elif komunikat == 'ERR_REG_COURSE_FULL':
+            if limit and period:
+                wait_time = period / limit
+                print("  * Course full, waiting %0.1f seconds... " % wait_time, end='', flush=True)
+                time.sleep(wait_time)
+                print("and trying again...")
+            else:
+                print("  * Course full, trying again...")
+            continue
+
+        elif komunikat == 'WARN_REGISTER_TRY_LIMIT_NEAR':
+            remaining = response_json['params']['remaining'] + 1
+            limit = response_json['params']['limit']
+            count = response_json['params']['count']
+            period = response_json['params']['period']
+            wait_time = remaining/(limit-count) if limit-count else remaining
+            print("  * Register try limit near, waiting %0.1f seconds... " % wait_time, end='', flush=True)
+            time.sleep(wait_time)
+            print("and trying again...")
+            continue
+        elif komunikat == 'WARN_REGISTER_TRY_LIMIT_EXCEEDED':
+            remaining = response_json['params']['remaining']
+            print("  * Register try limit exceeded, waiting %d seconds... " % remaining, end='', flush=True)
+            time.sleep(remaining)
+            print("and trying again...")
+            continue
+        elif komunikat in {'CONF_REG_SUCCESS', 'CONF_REG_SUCCESS_WITH_LINK'}:
+            success = True
+            print("  REGISTERED!")
         else:
-            print("  Status: %s" % response.json()['komunikat'])
-            return False
-    except json.JSONDecodeError:
-        # probably authentication error
-        print("JSONDecode error.")
-        return False
+            print("  UNHANDLED STATUS: %s" % response.json()['komunikat'])
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-u', '--username')
     parser.add_argument('-p', '--password')
-    parser.add_argument('-c', '--course_id')
-    parser.add_argument('-g', '--group_nr')
+    parser.add_argument('-c', '--cookie')
+    parser.add_argument('course_id', type=int)
+    parser.add_argument('group_nr', type=int)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    course_id = int(args.course_id)
-    group_nr = int(args.group_nr)
+
+    if not ((args.username and args.password) or args.cookie):
+        print("You need to provide username and password OR cookie.")
+        exit()
 
     try:
-        while True:
-            with requests.Session() as s:
-                print("Logging in to CAS... ", end='')
-                if cas_login(s, args.username, args.password):
-                    print("success.")
-                    print(" * BIGipSer...:  %s" % s.cookies[CAS_COOKIE_NAME])
-                    print(" * CASTGCNG:     %s" % s.cookies['CASTGCNG'])
-                    print(" * JSESSIONID:   %s" % s.cookies['JSESSIONID'])
-                    print("Authorizing to UL... ", end='')
-                    if ul_auth(s):
-                        print("success.")
-                        print(" * PHPSESSID:   %s" % s.cookies['PHPSESSID'])
-                        print(" * BIGipSer...: %s" % s.cookies[UL_COOKIE_NAME])
-                        print("Fetching data from group page... ", end='')
-                        fg = fetch_group(s, course_id, group_nr)
-                        if fg:
-                            print("success.")
-                            print(" * CSRF:    %s" % fg['csrf'])
-                            print(" * prgos:   %s" % fg['prgos'])
-                            print("Registering to group:")
-                            if register(s, course_id, group_nr, **fg):
-                                break
-                        else:
-                            print("fail.")
-                    else:
-                        print("fail.")
-                else:
-                    print("fail.")
-            print()
+        register(args.course_id, args.group_nr, args.cookie or None, args.username or None, args.password or None)
     except KeyboardInterrupt:
         pass
 
