@@ -3,6 +3,7 @@ import bs4
 import requests
 import settings
 import logging
+import time
 
 
 def soup(response):
@@ -28,8 +29,8 @@ def send_prepped(prepped):
 
 def ul_auth(session, username, password):
     def cas_login():
-        cas_success = False
-        while not cas_success:
+        while True:
+            cas_success = False
             print("Logging in to CAS... ", end='')
             get_response = session.get(settings.CAS_LOGIN_URL)
             token = select_one(get_response, 'input[name=lt]')['value']
@@ -37,16 +38,21 @@ def ul_auth(session, username, password):
                 post_data = dict(**settings.CAS_LOGIN_POST_DATA_BASE, username=username, password=password, lt=token)
                 post_response = session.post(settings.CAS_LOGIN_URL, data=post_data)
                 message = select_one(post_response, '#msg')
-                cas_success = 'success' in message['class']
+                try:
+                    cas_success = 'success' in message['class']
+                except TypeError:
+                    print("fail. (message None)")
                 if cas_success:
                     print("success.")
                     logging.info(" * BIGipSer...:  %s" % session.cookies[settings.CAS_COOKIE_NAME])
                     logging.info(" * CASTGCNG:     %s" % session.cookies['CASTGCNG'])
                     logging.info(" * JSESSIONID:   %s" % session.cookies['JSESSIONID'])
+                    break
                 else:
                     print("fail. (message classes: %s)" % ', '.join(message['class']))
             else:
                 print("fail. (no token)")
+            time.sleep(1)
 
     success = False
     while not success:
