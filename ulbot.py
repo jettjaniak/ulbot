@@ -95,11 +95,12 @@ def main():
         logging.basicConfig(
             filename='logs/u%s_%s.log' %
                      (args.username, datetime.strftime(datetime.now(), "%Y%m%d_%H-%M-%S.%f")),
-            level=logging.DEBUG
+            level=logging.DEBUG,
+            format='%(asctime)s %(message)s'
         )
     except OSError:
         print("OSError while configuring logging to file, changing to console.")
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
 
     if not ((args.username and args.password) or args.cookie):
         print("You need to provide username and password OR cookie.")

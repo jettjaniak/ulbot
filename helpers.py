@@ -40,9 +40,9 @@ def ul_auth(session, username, password):
                 cas_success = 'success' in message['class']
                 if cas_success:
                     print("success.")
-                    print(" * BIGipSer...:  %s" % session.cookies[settings.CAS_COOKIE_NAME])
-                    print(" * CASTGCNG:     %s" % session.cookies['CASTGCNG'])
-                    print(" * JSESSIONID:   %s" % session.cookies['JSESSIONID'])
+                    logging.info(" * BIGipSer...:  %s" % session.cookies[settings.CAS_COOKIE_NAME])
+                    logging.info(" * CASTGCNG:     %s" % session.cookies['CASTGCNG'])
+                    logging.info(" * JSESSIONID:   %s" % session.cookies['JSESSIONID'])
                 else:
                     print("fail. (message classes: %s)" % ', '.join(message['class']))
             else:
@@ -58,7 +58,7 @@ def ul_auth(session, username, password):
         success = settings.UL_COOKIE_NAME in session.cookies
     print("success.")
     print(" * PHPSESSID:   %s" % session.cookies['PHPSESSID'])
-    print(" * BIGipSer...: %s" % session.cookies[settings.UL_COOKIE_NAME])
+    logging.info(" * BIGipSer...: %s" % session.cookies[settings.UL_COOKIE_NAME])
 
 
 def fetch_group(cookie, course_id, group_nr):
