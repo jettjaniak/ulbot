@@ -20,7 +20,11 @@ def register(course_id, group_nr, cookie, username, password):
 
     print("Registering:")
     success = False
+    attempts = 0
     while not success:
+        attempts += 1
+        local_now = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f")
+        print("# %s, attempt %d #" % (local_now, attempts))
         response = send_prepped(prepped)
         logging.debug(response.text)
 
@@ -87,7 +91,15 @@ def main():
     parser.add_argument('course_id', type=int)
     parser.add_argument('group_nr', type=int)
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO)
+    try:
+        logging.basicConfig(
+            filename='logs/u%s_%s.log' %
+                     (args.username, datetime.strftime(datetime.now(), "%Y%m%d_%H-%M-%S.%f")),
+            level=logging.DEBUG
+        )
+    except OSError:
+        print("OSError while configuring logging to file, changing to console.")
+        logging.basicConfig(level=logging.DEBUG)
 
     if not ((args.username and args.password) or args.cookie):
         print("You need to provide username and password OR cookie.")
