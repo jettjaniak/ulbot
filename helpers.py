@@ -42,6 +42,7 @@ def ul_auth(session, username, password):
                     cas_success = 'success' in message['class']
                 except TypeError:
                     print("fail. (message None)")
+                    logging.debug(post_response.text)
                 if cas_success:
                     print("success.")
                     logging.info(" * BIGipSer...:  %s" % session.cookies[settings.CAS_COOKIE_NAME])
@@ -69,7 +70,6 @@ def ul_auth(session, username, password):
 
 def fetch_group(cookie, course_id, group_nr):
     response = requests.get(settings.COURSE_URL_BASE % (course_id, group_nr), cookies={'PHPSESSID': cookie})
-    logging.debug(response.history)
     group_soup = soup(response)
     prgos_div = group_soup.select_one('.groupCart div')
     if prgos_div:
@@ -80,6 +80,8 @@ def fetch_group(cookie, course_id, group_nr):
                 csrf=re.search('csrfToken: \'([0-9]{4}-[0-9]{2}-[0-9]{2}-[a-f0-9]{16})\'',
                                response.text).group(1)
             )
+    print("Wrong group, exiting.")
+    exit()
 
 
 def auth_and_return_cookie(username, password):
