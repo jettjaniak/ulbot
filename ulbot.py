@@ -32,7 +32,7 @@ def register(course_id, group_nr, cookie, username, password, delay=0.0):
             response_json = response.json()
         except json.JSONDecodeError:
             print("Authentication error.")
-            register(course_id, group_nr, secrets['cookie'], username, password)
+            return register(course_id, group_nr, secrets['cookie'], username, password)
 
         komunikat = response_json['komunikat']
         if komunikat == 'ERR_REG_NOT_ACTIVE_YET':
@@ -52,7 +52,7 @@ def register(course_id, group_nr, cookie, username, password, delay=0.0):
                 print('    More than one minute left, waiting ', time_left-timedelta(minutes=1), ' to try again...')
                 time.sleep((time_left-timedelta(minutes=1)).total_seconds())
                 # time.sleep(3)
-                register(course_id, group_nr, secrets['cookie'], username, password)
+                return register(course_id, group_nr, secrets['cookie'], username, password)
         elif komunikat == 'ERR_REG_COURSE_FULL':
             if limit and period:
                 wait_time = period / limit
