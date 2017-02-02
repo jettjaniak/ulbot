@@ -11,7 +11,7 @@ from helpers import send_prepped, provide_secrets
 # TODO: async (grequests)
 
 
-def register(course_id, group_nr, cookie, username, password):
+def register(course_id, group_nr, cookie, username, password, delay=0.0):
     secrets = provide_secrets(cookie, username, password, course_id, group_nr)
     post_data = dict(course_id=course_id, gr_no=group_nr, csrftoken=secrets['csrf'], prgos_id=secrets['prgos'])
     request = requests.Request('POST', settings.REGISTER_URL, data=post_data, cookies={'PHPSESSID': secrets['cookie']})
@@ -39,10 +39,13 @@ def register(course_id, group_nr, cookie, username, password):
             open_date = datetime.strptime(response_json['params']['openDate'], '%Y-%m-%d %H:%M:%S')
             now = datetime.strptime(requests.get(settings.APISRV_NOW_URL).text, '"%Y-%m-%d %H:%M:%S.%f"')
             time_left = open_date - now
+            if time_left < timedelta(0):
+                logging.info("time_left < 0: %f" % time_left.total_seconds())
+                continue
             print("  * Registration not active yet.")
             if time_left < timedelta(minutes=1):
                 print('    Waiting', time_left, 'to send register request...')
-                time.sleep(time_left.total_seconds())
+                time.sleep(time_left.total_seconds() + delay)
                 # time.sleep(3)
                 continue
             else:
@@ -88,6 +91,7 @@ def main():
     parser.add_argument('-u', '--username')
     parser.add_argument('-p', '--password')
     parser.add_argument('-c', '--cookie')
+    parser.add_argument('-d', '--delay', type=float, default=0.0)
     parser.add_argument('course_id', type=int)
     parser.add_argument('group_nr', type=int)
     args = parser.parse_args()
@@ -107,7 +111,7 @@ def main():
         exit()
 
     try:
-        register(args.course_id, args.group_nr, args.cookie or None, args.username or None, args.password or None)
+        register(args.course_id, args.group_nr, args.cookie, args.username, args.password, args.delay)
     except KeyboardInterrupt:
         pass
 
