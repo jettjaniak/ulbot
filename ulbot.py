@@ -6,7 +6,7 @@ import argparse
 from datetime import datetime, timedelta
 
 import settings
-from helpers import send_prepped, provide_secrets
+from helpers import send_prepped, provide_secrets, select_one
 
 # TODO: async (grequests)
 
@@ -62,6 +62,9 @@ def register(course_id, group_nr, cookie, username, password, delay=0.0):
             else:
                 print("  * Course full, trying again...")
             continue
+        elif komunikat == 'ERR_REG_ALREADY_REG':
+            print("Error: Already registered for this course.")
+            break
 
         elif komunikat == 'WARN_REGISTER_TRY_LIMIT_NEAR':
             remaining = response_json['params']['remaining'] + 1
@@ -79,6 +82,7 @@ def register(course_id, group_nr, cookie, username, password, delay=0.0):
             time.sleep(remaining)
             print("and trying again...")
             continue
+
         elif komunikat in {'CONF_REG_SUCCESS', 'CONF_REG_SUCCESS_WITH_LINK'}:
             success = True
             print("  REGISTERED!")
@@ -111,7 +115,12 @@ def main():
         exit()
 
     try:
-        register(args.course_id, args.group_nr, args.cookie, args.username, args.password, args.delay)
+        group_page = requests.get(settings.COURSE_URL_BASE % (args.course_id, args.group_nr))
+        if group_page.url != settings.UNKNOWN_COURSE_URL:
+            print("Group found:", select_one(group_page, 'td h1').text)
+            register(args.course_id, args.group_nr, args.cookie, args.username, args.password, args.delay)
+        else:
+            print("Unknown group.")
     except KeyboardInterrupt:
         pass
 

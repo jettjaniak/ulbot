@@ -80,7 +80,7 @@ def fetch_group(cookie, course_id, group_nr):
                 csrf=re.search('csrfToken: \'([0-9]{4}-[0-9]{2}-[0-9]{2}-[a-f0-9]{16})\'',
                                response.text).group(1)
             )
-    print("Wrong group, exiting.")
+    print("Error: No prgos_id.")
     exit()
 
 
