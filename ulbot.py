@@ -6,17 +6,18 @@ import argparse
 from datetime import datetime, timedelta
 
 import settings
-from helpers import send_prepped, provide_secrets, select_one
+from helpers import send_prepped, provide_secrets, select_one, send_green_prepped
 
 # TODO: async (grequests)
 
 
-def register(course_id, group_nr, cookie, username, password, delay=0.0):
+def register(course_id, group_nr, cookie, username, password, delay=0.0, async=False):
     secrets = provide_secrets(cookie, username, password, course_id, group_nr)
     post_data = dict(course_id=course_id, gr_no=group_nr, csrftoken=secrets['csrf'], prgos_id=secrets['prgos'])
     request = requests.Request('POST', settings.REGISTER_URL, data=post_data, cookies={'PHPSESSID': secrets['cookie']})
     prepped = request.prepare()
-    limit = 0
+    limit = settings.DEFAULT_LIMIT
+    period = settings.DEFAULT_PERIOD
 
     print("Registering:")
     success = False
@@ -39,15 +40,21 @@ def register(course_id, group_nr, cookie, username, password, delay=0.0):
             open_date = datetime.strptime(response_json['params']['openDate'], '%Y-%m-%d %H:%M:%S')
             now = datetime.strptime(requests.get(settings.APISRV_NOW_URL).text, '"%Y-%m-%d %H:%M:%S.%f"')
             time_left = open_date - now
-            if time_left < timedelta(0):
-                logging.info("time_left < 0: %f" % time_left.total_seconds())
-                continue
             print("  * Registration not active yet.")
             if time_left < timedelta(minutes=1):
-                print('    Waiting', time_left, 'to send register request...')
-                time.sleep(time_left.total_seconds() + delay)
-                # time.sleep(3)
-                continue
+                if not async:
+                    if time_left < timedelta(0):
+                        logging.info("time_left < 0: %f" % time_left.total_seconds())
+                    else:
+                        print('    Waiting', time_left, 'to send register request...')
+                        time.sleep(time_left.total_seconds() + delay)
+                        # time.sleep(3)
+                    continue
+                else:
+                    time.sleep(time_left.total_seconds() + delay - 1)
+                    for greenlet in send_green_prepped(prepped, 17, 2):
+                        print(greenlet.value)
+                    break
             else:
                 print('    More than one minute left, waiting ', time_left-timedelta(minutes=1), ' to try again...')
                 time.sleep((time_left-timedelta(minutes=1)).total_seconds())
@@ -96,6 +103,7 @@ def main():
     parser.add_argument('-p', '--password')
     parser.add_argument('-c', '--cookie')
     parser.add_argument('-d', '--delay', type=float, default=0.0)
+    parser.add_argument('-a', '--async')
     parser.add_argument('course_id', type=int)
     parser.add_argument('group_nr', type=int)
     args = parser.parse_args()
@@ -118,7 +126,7 @@ def main():
         group_page = requests.get(settings.COURSE_URL_BASE % (args.course_id, args.group_nr))
         if group_page.url != settings.UNKNOWN_COURSE_URL:
             print("Group found:", select_one(group_page, 'td h1').text)
-            register(args.course_id, args.group_nr, args.cookie, args.username, args.password, args.delay)
+            register(args.course_id, args.group_nr, args.cookie, args.username, args.password, args.delay, args.async)
         else:
             print("Unknown group.")
     except KeyboardInterrupt:

@@ -4,6 +4,9 @@ import requests
 import settings
 import logging
 import time
+import json
+import gevent
+import numpy as np
 
 
 def soup(response):
@@ -25,6 +28,23 @@ def send_prepped(prepped):
                 return response
             except requests.exceptions.ConnectionError:
                 continue
+
+
+def send_green_prepped(prepped, quantity, period):
+    def send(delay):
+        gevent.sleep(delay)
+        try:
+            response = s.send(prepped)
+            response_json = response.json()
+        except requests.exceptions.ConnectionError:
+            return "connection error"
+        except json.JSONDecodeError:
+            return "auth error"
+        return response_json['komunikat']
+
+    s = requests.Session()
+    distribution = np.linspace(0, period, quantity)
+    return gevent.joinall([gevent.spawn(send, d) for d in distribution])
 
 
 def ul_auth(session, username, password):

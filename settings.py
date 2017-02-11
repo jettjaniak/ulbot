@@ -15,5 +15,9 @@ UNKNOWN_COURSE_URL = UL_URL + 'index.php?msg=ERR_REG_UNK_COURSE'
 COURSE_URL_BASE = UL_URL + 'course.php?course_id=%d&gr_no=%d'
 
 REGISTER_URL = UL_URL + 'cart.php?op=reg'
+USOS_API_URL = 'https://usosapps.uw.edu.pl/'
 
-APISRV_NOW_URL = 'http://usosapps.uw.edu.pl/services/apisrv/now'
+APISRV_NOW_URL = USOS_API_URL + 'services/apisrv/now'
+
+DEFAULT_LIMIT = 10
+DEFAULT_PERIOD = 20
